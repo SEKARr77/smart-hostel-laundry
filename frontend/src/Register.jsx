@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { db } from './firebase';
+import { StateContext } from './App';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function Register() {
+    const { appState } = useContext(StateContext);
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const sessionId = searchParams.get('sessionId') || '';
@@ -17,6 +19,13 @@ export default function Register() {
         if (!sessionId) {
             setStatus('error');
             setMessage('Invalid session. Please scan the QR code again.');
+            return;
+        }
+
+        // Check for Maximum capacity
+        if (appState.registeredCount >= 150) {
+            setStatus('error');
+            setMessage('Today reached maximum counts (150/150). System locked.');
             return;
         }
 

@@ -3,17 +3,57 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { StateContext } from './App';
 import { db } from './firebase';
 import { doc, updateDoc, collection, query, where, getDocs, setDoc, getDoc } from 'firebase/firestore';
-import { Users, Clock, History, LayoutDashboard, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download, Share2, RefreshCw } from 'lucide-react';
+import { Users, Clock, History, LayoutDashboard, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Download, Share2, RefreshCw, ShieldCheck } from 'lucide-react';
 
 export default function Admin() {
     const { appState } = useContext(StateContext);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [authMode, setAuthMode] = useState('login'); // 'login', 'signup', 'forgot'
+    const [passwordInput, setPasswordInput] = useState('');
+    const [recoveryKeyInput, setRecoveryKeyInput] = useState('');
+    const [error, setError] = useState('');
+
     const todayStr = new Date().toLocaleDateString('en-CA');
     const [selectedDate, setSelectedDate] = useState(todayStr);
     const [allLogs, setAllLogs] = useState({});
     const [currentMonth, setCurrentMonth] = useState(new Date(new Date().setDate(1)));
 
-    // Sync logs for the selected date if not today (today is synced in App.jsx)
+    // Handle Authentication
+    const handleAuth = async (e) => {
+        e.preventDefault();
+        setError('');
+
+        if (authMode === 'signup') {
+            if (passwordInput.length < 4) return setError('Password too short (min 4 chars)');
+            const stateRef = doc(db, 'system', 'state');
+            await setDoc(stateRef, {
+                superAdminPassword: passwordInput,
+                staffStatus: 'Absent',
+                lastUpdated: Date.now()
+            }, { merge: true });
+            alert("Admin Access Initialized Successfully!");
+            setIsAuthenticated(true);
+        } else if (authMode === 'login') {
+            if (passwordInput === appState.superAdminPassword) {
+                setIsAuthenticated(true);
+            } else {
+                setError('Invalid Admin Password');
+            }
+        }
+    };
+
+    // Auto-detect signup mode if no password exists
     useEffect(() => {
+        if (!appState.superAdminPassword) {
+            setAuthMode('signup');
+        } else {
+            setAuthMode('login');
+        }
+    }, [appState.superAdminPassword]);
+
+    // ... (rest of the original Admin logic)
+    useEffect(() => {
+        if (!isAuthenticated) return;
         const fetchLogs = async () => {
             const q = query(collection(db, 'registrations'), where('date', '==', selectedDate));
             const snap = await getDocs(q);
@@ -21,10 +61,11 @@ export default function Admin() {
             setAllLogs(prev => ({ ...prev, [selectedDate]: logs }));
         };
         fetchLogs();
-    }, [selectedDate]);
+    }, [selectedDate, isAuthenticated]);
 
-    // QR Session Rotation Logic (Check if session is > 24h old or missing)
+    // QR Session Rotation Logic
     useEffect(() => {
+        if (!isAuthenticated) return;
         const checkSession = async () => {
             const stateRef = doc(db, 'system', 'state');
             const snap = await getDoc(stateRef);
@@ -33,7 +74,7 @@ export default function Admin() {
             }
         };
         checkSession();
-    }, []);
+    }, [isAuthenticated]);
 
     const rotateQr = async () => {
         const stateRef = doc(db, 'system', 'state');
@@ -48,6 +89,16 @@ export default function Admin() {
         const newStatus = appState.staffStatus === 'Present' ? 'Absent' : 'Present';
         const stateRef = doc(db, 'system', 'state');
         await updateDoc(stateRef, { staffStatus: newStatus });
+    };
+
+    const [newPass, setNewPass] = useState('');
+    const updateAdminPassword = async (e) => {
+        e.preventDefault();
+        if (!newPass) return;
+        const stateRef = doc(db, 'system', 'state');
+        await updateDoc(stateRef, { superAdminPassword: newPass });
+        setNewPass('');
+        alert("Super Admin Password Updated!");
     };
 
     const downloadQR = () => {
@@ -95,6 +146,50 @@ export default function Admin() {
         return <div className="calendar-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>{days}</div>;
     };
 
+    if (!isAuthenticated) {
+        return (
+            <div className="container animate-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '90vh' }}>
+                <div className="card" style={{ maxWidth: '400px', width: '100%', padding: '2.5rem' }}>
+                    <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                        <ShieldCheck size={48} color="var(--primary)" style={{ marginBottom: '1rem' }} />
+                        <h1 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>
+                            {authMode === 'signup' ? 'Set Admin Access' : 'Admin Login'}
+                        </h1>
+                        <p className="text-muted" style={{ fontSize: '0.875rem' }}>
+                            {authMode === 'signup' ? 'Initialize the super admin security.' : 'Access restricted to hostel staff.'}
+                        </p>
+                    </div>
+
+                    <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        <div>
+                            <label className="text-muted" style={{ fontSize: '0.75rem' }}>Admin Password</label>
+                            <input
+                                type="password"
+                                className="input"
+                                placeholder="••••••••"
+                                value={passwordInput}
+                                onChange={e => setPasswordInput(e.target.value)}
+                                required
+                            />
+                        </div>
+
+                        {error && <p style={{ color: 'var(--danger)', fontSize: '0.75rem', fontWeight: 600 }}>{error}</p>}
+
+                        <button className="btn btn-primary" style={{ width: '100%' }}>
+                            {authMode === 'signup' ? 'Create Account' : 'Enter Portal'}
+                        </button>
+                    </form>
+
+                    <div style={{ marginTop: '1.5rem', textAlign: 'center', fontSize: '0.8rem' }}>
+                        {authMode === 'signup' && (
+                            <button className="text-muted" onClick={() => setAuthMode('login')} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>Back to Login</button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="container animate-fade-in">
             <div className="portal-header">
@@ -102,7 +197,10 @@ export default function Admin() {
                     <h1>Admin Portal <span style={{ fontSize: '0.8rem', color: 'var(--secondary)' }}>(Firebase Cloud)</span></h1>
                     <p className="text-muted">High-security Hostel Laundry Management</p>
                 </div>
-                <LayoutDashboard size={32} color="var(--primary)" />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <button className="btn" onClick={() => setIsAuthenticated(false)} style={{ padding: '0.5rem 1rem', fontSize: '0.75rem', background: 'rgba(255,255,255,0.1)' }}>Logout</button>
+                    <LayoutDashboard size={32} color="var(--primary)" />
+                </div>
             </div>
 
             <div className="stats-grid">
@@ -146,6 +244,24 @@ export default function Admin() {
                                 <Share2 size={14} /> Share
                             </button>
                         </div>
+                    </div>
+
+                    <div className="card">
+                        <h3 style={{ margin: '0 0 1rem 0' }}>Security Settings</h3>
+                        <form onSubmit={updateAdminPassword} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <p className="text-muted" style={{ fontSize: '0.8rem' }}>Set/Update Super Admin Password for student updates.</p>
+                            <input
+                                type="password"
+                                className="input"
+                                placeholder="New Password"
+                                value={newPass}
+                                onChange={(e) => setNewPass(e.target.value)}
+                                style={{ background: 'white' }}
+                            />
+                            <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.5rem' }}>
+                                Save Password
+                            </button>
+                        </form>
                     </div>
 
                     <div className="card">

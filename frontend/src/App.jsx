@@ -11,6 +11,7 @@ export const StateContext = createContext();
 export default function App() {
   const [appState, setAppState] = useState({
     staffStatus: 'Absent',
+    superAdminPassword: '',
     registeredCount: 0,
     currentQrSession: '',
     dailyLogs: {}
@@ -26,6 +27,7 @@ export default function App() {
         setAppState(prev => ({
           ...prev,
           staffStatus: data.staffStatus || 'Absent',
+          superAdminPassword: data.superAdminPassword || '',
           currentQrSession: data.currentQrSession || ''
         }));
       }
