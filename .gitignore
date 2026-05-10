@@ -1,0 +1,17 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Java
+*.class
+backend/build/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.log
+.env
+.firebase/
